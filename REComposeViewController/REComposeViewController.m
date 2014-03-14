@@ -28,16 +28,10 @@
 
 #define kSheetViewWidthPad 400
 #define kSheetViewWidthPhoneLandscape 472
-#define kSheetViewWidthPhonePortrait 312
+#define kSheetViewWidthPhonePortrait 290
 
-#define kSheetViewHeightPhone 202
+#define kSheetViewHeightPhone 182
 #define kSheetViewHeightPad 300
-
-#define kContainerVerticalOffsetPadLandscape 316
-#define kContainerVerticalOffsetPhoneLandscape 216
-
-#define kContainerVerticalOffsetPadPortrait 416
-#define kContainerVerticalOffsetPhonePortrait 216
 
 #define kPaperClipIntersect 73
 
@@ -71,12 +65,26 @@
 {
     self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
     if (self) {
-        _cornerRadius = (REUIKitIsFlatMode()) ? 6 : 10;
+        _cornerRadius = (REUIKitIsFlatMode()) ? 7 : 10;
         NSInteger sheetWidth = UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad ? kSheetViewWidthPad : UIInterfaceOrientationIsLandscape([[UIApplication sharedApplication] statusBarOrientation]) ? kSheetViewWidthPhoneLandscape : kSheetViewWidthPhonePortrait;
         _sheetView = [[REComposeSheetView alloc] initWithFrame:CGRectMake(0, 0, sheetWidth, UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad ? kSheetViewHeightPad : kSheetViewHeightPhone)];
         self.tintColor = [UIColor colorWithRed:247/255.0 green:247/255.0 blue:247/255.0 alpha:1.0];
+        
+        [self registerForKeyboardNotifications];
     }
     return self;
+}
+
+- (void)dealloc
+{
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)registerForKeyboardNotifications
+{
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWillShow:)
+                                                 name:UIKeyboardWillShowNotification object:nil];
 }
 
 - (int)currentWidth
@@ -107,9 +115,14 @@
         _backgroundView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.4];
     }
     [self.view addSubview:_backgroundView];
-
+    
     _containerView = [[UIView alloc] initWithFrame:CGRectMake(0, self.view.frame.size.height, self.view.frame.size.width, sheetHeight)];
     _containerView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    if (REUIKitIsFlatMode()) {
+        _containerView.alpha = 0;
+    }
+    _containerView.clipsToBounds = YES;
+    
     _backView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, sheetWidth, sheetHeight)];
     _backView.center = CGPointMake(_containerView.frame.size.width / 2, _containerView.frame.size.height / 2);
     _backView.layer.cornerRadius = _cornerRadius;
@@ -134,7 +147,7 @@
     if (!REUIKitIsFlatMode()) {
         [self setPaperClip];
     }
-        
+    
     if (!_attachmentImage)
         _attachmentImage = [UIImage imageNamed:@"REComposeViewController.bundle/URLAttachment"];
     
@@ -147,12 +160,11 @@
 - (void)didMoveToParentViewController:(UIViewController *)parent
 {
     [super didMoveToParentViewController:parent];
-
+    
     _backgroundView.frame = _rootViewController.view.bounds;
     
     if (REUIKitIsFlatMode()) {
         [self layoutWithOrientation:self.interfaceOrientation width:self.view.frame.size.width height:self.view.frame.size.height];
-        self.containerView.alpha = 0;
         [self.sheetView.textView becomeFirstResponder];
     } else {
         [UIView animateWithDuration:0.4 animations:^{
@@ -161,18 +173,7 @@
         }];
     }
     
-    [UIView animateWithDuration:0.3
-                          delay:0
-                        options:UIViewAnimationOptionCurveEaseInOut
-                     animations:^{
-                        if (REUIKitIsFlatMode()) {
-                            self.containerView.alpha = 1;
-                        }
-                        self.backgroundView.alpha = 1;
-    } completion:nil];
-    
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(viewOrientationDidChanged:) name:UIDeviceOrientationDidChangeNotification object:nil];
-
 }
 
 - (void)setShadowForView:(UIView *)view{
@@ -183,11 +184,12 @@
     view.layer.shouldRasterize = YES;
 }
 
-- (void)setPaperClip{
-        _paperclipView = [[UIImageView alloc] initWithFrame:CGRectMake(_sheetView.frame.size.width + _backView.frame.origin.x - kPaperClipIntersect, 60, 79, 34)];
-        _paperclipView.image = [UIImage imageNamed:@"REComposeViewController.bundle/PaperClip"];
-        [_containerView addSubview:_paperclipView];
-        [_paperclipView setHidden:YES];
+- (void)setPaperClip
+{
+    _paperclipView = [[UIImageView alloc] initWithFrame:CGRectMake(_sheetView.frame.size.width + _backView.frame.origin.x - kPaperClipIntersect, 60, 79, 34)];
+    _paperclipView.image = [UIImage imageNamed:@"REComposeViewController.bundle/PaperClip"];
+    [_containerView addSubview:_paperclipView];
+    [_paperclipView setHidden:YES];
 }
 
 - (void)presentFromRootViewController
@@ -210,38 +212,25 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self name:UIDeviceOrientationDidChangeNotification object:nil];
 }
 
+- (void)updateContainerViewWithKeyboardHeight:(CGFloat)keyboardHeight
+{
+    _containerView.center = CGPointMake(_rootViewController.view.bounds.size.width / 2,
+                                        (_rootViewController.view.bounds.size.height - keyboardHeight) / 2);
+    CGRect frame = _containerView.frame;
+    if (frame.origin.y < 20) frame.origin.y = 20;
+    _containerView.frame = frame;
+    
+}
+
 - (void)layoutWithOrientation:(UIInterfaceOrientation)interfaceOrientation width:(NSInteger)width height:(NSInteger)height
 {
-    NSInteger sheetWidth = UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad ? kSheetViewWidthPad : UIInterfaceOrientationIsLandscape([[UIApplication sharedApplication] statusBarOrientation]) ? kSheetViewWidthPhoneLandscape : kSheetViewWidthPhonePortrait;
-    NSInteger sheetHeight = UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad ? kSheetViewHeightPad : kSheetViewHeightPhone;
-    
-    if (UIInterfaceOrientationIsLandscape(interfaceOrientation)) {
-        CGRect frame = _containerView.frame;
-        
-        NSInteger verticalOffset = UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad ? kContainerVerticalOffsetPadLandscape : kContainerVerticalOffsetPhoneLandscape;
-        
-        frame.origin.y = height - verticalOffset - sheetHeight;
-        if (frame.origin.y < 20) frame.origin.y = 20;
-        _containerView.frame = frame;
-        
-        _containerView.clipsToBounds = YES;
-    } else {
-        CGRect frame = _containerView.frame;
-        
-        NSInteger verticalOffset = UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad ? kContainerVerticalOffsetPadPortrait : kContainerVerticalOffsetPhonePortrait;
-        
-        frame.origin.y = height - verticalOffset - sheetHeight;
-        if (frame.origin.y < 20) frame.origin.y = 20;
-        _containerView.frame = frame;
-    }
-    
     if (!REUIKitIsFlatMode()) {
         [self setPaperClip];
     }
     
     _backView.center = CGPointMake(self.view.center.x, _backView.center.y);
     _sheetView.frame = _backView.bounds;
-
+    
     
     _paperclipView.hidden = !_hasAttachment;
     _sheetView.attachmentView.hidden = !_hasAttachment;
@@ -270,6 +259,24 @@
     _sheetView.textViewContainer.frame = textViewContainerFrame;
 }
 
+- (void)keyboardWillShow:(NSNotification*)aNotification
+{
+    NSDictionary* info = [aNotification userInfo];
+    CGSize keyboardSize =  [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size;
+    float keyboardHeight = (!UIDeviceOrientationIsLandscape([[UIApplication sharedApplication] statusBarOrientation])) ? keyboardSize.height : keyboardSize.width;
+    [self updateContainerViewWithKeyboardHeight:keyboardHeight];
+    
+    [UIView animateWithDuration:0.3
+                          delay:0
+                        options:UIViewAnimationOptionCurveEaseInOut
+                     animations:^{
+                         if (REUIKitIsFlatMode()) {
+                             self.containerView.alpha = 1;
+                         }
+                         self.backgroundView.alpha = 1;
+                     } completion:nil];
+}
+
 - (void)dismissViewControllerAnimated:(BOOL)flag completion:(void (^)(void))completion
 {
     [_sheetView.textView resignFirstResponder];
@@ -277,13 +284,13 @@
     
     [UIView animateWithDuration:0.3 animations:^{
         if (REUIKitIsFlatMode()) {
-          if (_result == REComposeResultPosted) {
-//            facebook and twitter style in iOS7
-            CGRect frame = weakSelf.containerView.frame;
-            frame.origin.y = 0 - weakSelf.containerView.frame.size.height;
-            weakSelf.containerView.frame = frame;
-          }
-          self.containerView.alpha = 0;
+            if (_result == REComposeResultPosted) {
+                // Facebook and Twitter style on iOS7
+                CGRect frame = weakSelf.containerView.frame;
+                frame.origin.y = 0 - weakSelf.containerView.frame.size.height;
+                weakSelf.containerView.frame = frame;
+            }
+            self.containerView.alpha = 0;
         } else {
             CGRect frame = weakSelf.containerView.frame;
             frame.origin.y =  weakSelf.rootViewController.view.frame.size.height;
@@ -380,13 +387,13 @@
 - (void)didTapAttachmentView:(id)sender
 {
     UIImagePickerController *picker = [[UIImagePickerController alloc] init];
-    // If our device has a cmera, we want to take a picture, otherwise we just pick from the library
+    // If our device has a camera, we want to take a picture, otherwise we just pick from the library
     if ([UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypeCamera]) {
-    [picker setSourceType:UIImagePickerControllerSourceTypeCamera];
+        [picker setSourceType:UIImagePickerControllerSourceTypeCamera];
     } else {
-    [picker setSourceType:UIImagePickerControllerSourceTypePhotoLibrary];
+        [picker setSourceType:UIImagePickerControllerSourceTypePhotoLibrary];
     }
-
+    
     picker.delegate = self;
     [self presentViewController:picker animated:YES completion:nil];
 }
