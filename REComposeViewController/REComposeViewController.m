@@ -155,6 +155,14 @@
     [_sheetView.attachmentViewButton addTarget:self
                                         action:@selector(didTapAttachmentView:)
                               forControlEvents:UIControlEventTouchUpInside];
+    
+    _rootViewController = [UIApplication sharedApplication].keyWindow.rootViewController;
+}
+
+- (void)updateViewConstraints
+{
+    [super updateViewConstraints];
+    [self didMoveToParentViewController:nil];
 }
 
 - (void)didMoveToParentViewController:(UIViewController *)parent
